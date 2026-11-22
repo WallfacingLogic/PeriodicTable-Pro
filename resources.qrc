@@ -1,0 +1,7 @@
+<!DOCTYPE RCC>
+<RCC>
+    <qresource prefix="/">
+        <file>resources/PeriodicTable.ico</file>
+        <file>resources/PeriodicTable.png</file>
+    </qresource>
+</RCC>

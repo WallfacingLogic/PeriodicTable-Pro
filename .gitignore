@@ -1,0 +1,26 @@
+# 构建产物
+build/
+build-linux-fix/
+*.obj
+*.pdb
+*.tlog
+*.exe
+
+# 签名证书/私钥（切勿入库）
+*.pfx
+*.p12
+*.key
+
+# 大体积发布包（校验值与发布说明仍会跟踪）
+*.7z
+*.tar.gz
+linux/PeriodicTable
+
+# Qt / VS 中间文件
+*.autogen/
+.qt/
+*.user
+x64/
+
+# 临时截图
+*.png.tmp

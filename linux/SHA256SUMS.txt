@@ -1,0 +1,2 @@
+ede7afc8a6961949b4f488c9327eabb4b5a87a6ee53bd0476cf1071b060a8632  periodic-table-linux-selfcontained.tar.gz
+c7f06b8e2c1ca4eed80921074b4716b6f8a079a561ee8b380c9464ceda9a0ec1  periodic-table-linux-x64.tar.gz

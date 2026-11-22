@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=元素周期表
+NameEN=Periodic Table Pro
+Comment=专业完整的交互式元素周期表
+Exec=PeriodicTable
+Icon=periodic-table
+Terminal=false
+Categories=Education;Science;Chemistry;
+Keywords=元素周期表;化学;periodic;table;chemistry;
+StartupNotify=true
