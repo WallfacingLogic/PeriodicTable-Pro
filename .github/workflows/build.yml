@@ -1,0 +1,171 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    name: Windows x64
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.1'
+          arch: win64_msvc2022_64
+          cache: true
+
+      - name: Configure
+        run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_PREFIX_PATH="${{ env.Qt6_DIR }}"
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Deploy Qt runtime
+        shell: pwsh
+        run: |
+          $exe = "build\Release\PeriodicTable.exe"
+          & windeployqt --release --no-translations --no-system-d3d-compiler `
+              --no-opengl-sw --no-quick-import $exe
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $name = "PeriodicTable-${{ github.ref_name }}-win64"
+          New-Item -ItemType Directory -Force -Path "dist\$name" | Out-Null
+          Copy-Item "build\Release\*" "dist\$name\" -Recurse -Force
+          Compress-Archive -Path "dist\$name\*" -DestinationPath "dist\$name.zip"
+          echo "ARTIFACT=dist\$name.zip" >> $env:GITHUB_ENV
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-x64
+          path: dist/*.zip
+
+  build-linux:
+    name: Linux x64
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake g++ qt6-base-dev libgl1-mesa-dev \
+              fonts-noto-cjk python3-fonttools zlib1g-dev
+
+      - name: Build
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build -j$(nproc)
+
+      - name: Assemble self-contained package
+        run: |
+          set -e
+          NAME="PeriodicTable-${{ github.ref_name }}-linux-x64"
+          PKG="dist/$NAME"
+          mkdir -p "$PKG/lib/plugins/platforms" "$PKG/fonts"
+
+          cp build/PeriodicTable "$PKG/"
+          cp resources/PeriodicTable.png "$PKG/periodic-table.png"
+
+          # 递归收集运行依赖（排除 glibc/gcc 核心）
+          collect() {
+            local target="$1"
+            ldd "$target" 2>/dev/null | awk '/=> \// {print $3}' | while read -r lib; do
+              [ -f "$lib" ] || continue
+              b=$(basename "$lib")
+              case "$b" in
+                libc.so.6|libm.so.6|libpthread.so.0|libdl.so.2|librt.so.1|libstdc++.so.6|libgcc_s.so.1|ld-linux*) continue ;;
+              esac
+              if [ ! -e "$PKG/lib/$b" ]; then
+                cp -L "$lib" "$PKG/lib/$b"
+                collect "$PKG/lib/$b"
+              fi
+            done
+          }
+          collect build/PeriodicTable
+
+          # 平台插件
+          PLUGDIR=$(find /usr/lib -type d -path '*qt6/plugins/platforms' | head -1)
+          for plug in libqxcb.so libqoffscreen.so libqminimal.so; do
+            [ -f "$PLUGDIR/$plug" ] && cp "$PLUGDIR/$plug" "$PKG/lib/plugins/platforms/"
+          done
+          for plug in "$PKG"/lib/plugins/platforms/*.so; do
+            [ -f "$plug" ] && collect "$plug"
+          done
+
+          # 中文字体子集（覆盖全部 118 元素中文名，含扩展区生僻字）
+          python3 - <<'PY'
+          import glob
+          chars=set(chr(i) for i in range(0x20,0x7f))
+          for c in "，。、；：？！“”‘’（）《》〈〉【】·—…￥％＃＆＠～²³¹⁰⁻×℃":
+              chars.add(c)
+          for p in glob.glob('*.cpp')+glob.glob('*.h'):
+              chars.update(ch for ch in open(p,encoding='utf-8').read() if ord(ch)>127)
+          open('/tmp/charset.txt','w',encoding='utf-8').write(''.join(sorted(chars)))
+          PY
+          for w in Regular Bold; do
+            python3 -m fontTools.subset "/usr/share/fonts/opentype/noto/NotoSansCJK-${w}.ttc" \
+              --font-number=2 --text-file=/tmp/charset.txt \
+              --output-file="$PKG/fonts/NotoSansSC-${w}.otf" \
+              --layout-features='*' --no-hinting --desubroutinize --name-IDs='*'
+          done
+
+          # 运行脚本
+          cp linux/run-selfcontained.sh "$PKG/run.sh"
+          cp linux/run.sh "$PKG/run-local.sh"
+          cp linux/install.sh linux/uninstall.sh "$PKG/"
+          cp linux/periodic-table.desktop "$PKG/"
+          cp linux/README.md "$PKG/README.md"
+          chmod +x "$PKG/PeriodicTable" "$PKG"/*.sh
+
+          tar -czf "dist/$NAME.tar.gz" -C dist "$NAME"
+          cd dist && sha256sum *.tar.gz > SHA256SUMS.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-x64
+          path: |
+            dist/*.tar.gz
+            dist/SHA256SUMS.txt
+
+  release:
+    name: Publish Release
+    needs: [build-windows, build-linux]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Collect
+        run: |
+          mkdir -p out
+          find artifacts -type f \( -name '*.zip' -o -name '*.tar.gz' -o -name 'SHA256SUMS.txt' \) -exec cp {} out/ \;
+          ls -lh out/
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: out/*
+          generate_release_notes: true
+          body: |
+            ## 元素周期表 Pro ${{ github.ref_name }}
+
+            ### 下载
+            | 平台 | 文件 |
+            |------|------|
+            | Windows x64 | `PeriodicTable-${{ github.ref_name }}-win64.zip` |
+            | Linux x64 | `PeriodicTable-${{ github.ref_name }}-linux-x64.tar.gz` |
+
+            Windows：解压后双击 `PeriodicTable.exe`（已包含 Qt 运行库）。
+            Linux：`tar -xzf` 后执行 `./run.sh`，或 `sudo ./install.sh` 安装到系统。

@@ -1,26 +1,57 @@
-# 构建产物
+# ---------- 构建产物 ----------
 build/
-build-linux-fix/
-*.obj
-*.pdb
-*.tlog
-*.exe
+build-*/
+out/
+dist/
+.runtime/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+*.autogen/
+.qt/
+x64/
+*.user
 
-# 签名证书/私钥（切勿入库）
+# ---------- 编译中间文件 ----------
+*.obj
+*.o
+*.pdb
+*.ilk
+*.tlog
+*.exp
+*.lib
+*.idb
+*.exe
+*.dll
+*.so
+*.so.*
+
+# ---------- 签名证书 / 私钥（切勿入库）----------
 *.pfx
 *.p12
 *.key
 
-# 大体积发布包（校验值与发布说明仍会跟踪）
+# ---------- 发布包（由 CI / 发布脚本产出，不入库）----------
 *.7z
+*.zip
 *.tar.gz
 linux/PeriodicTable
+linux/SHA256SUMS.txt
 
-# Qt / VS 中间文件
-*.autogen/
-.qt/
-*.user
-x64/
+# ---------- 系统 / 编辑器 ----------
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.swp
+*~
 
-# 临时截图
+# ---------- 临时文件 ----------
+*.tmp
+*.log
 *.png.tmp
+PeriodicTable.cer
+export_*.ps1
+test-*.png
