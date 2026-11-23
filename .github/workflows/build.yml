@@ -131,11 +131,21 @@ jobs:
           tar -czf "dist/$NAME.tar.gz" -C dist "$NAME"
           cd dist && sha256sum *.tar.gz > SHA256SUMS.txt
 
+      - name: Build .deb package
+        shell: bash
+        run: |
+          # 依赖 install + fakeroot + 图标工具（Ubuntu runner 自带大部分）
+          sudo apt-get install -y fakeroot > /dev/null
+          # 复制构建脚本到 runner 并构建（脚本读取 dist/ 下的 tarball）
+          mkdir -p dist
+          bash scripts/build-deb.sh "${GITHUB_REF_NAME#v}" "$PWD"
+
       - uses: actions/upload-artifact@v4
         with:
           name: linux-x64
           path: |
             dist/*.tar.gz
+            dist/*.deb
             dist/SHA256SUMS.txt
 
   release:
@@ -151,7 +161,7 @@ jobs:
       - name: Collect
         run: |
           mkdir -p out
-          find artifacts -type f \( -name '*.zip' -o -name '*.tar.gz' -o -name 'SHA256SUMS.txt' \) -exec cp {} out/ \;
+          find artifacts -type f \( -name '*.zip' -o -name '*.7z' -o -name '*.tar.gz' -o -name '*.deb' -o -name 'SHA256SUMS.txt' \) -exec cp {} out/ \;
           ls -lh out/
 
       - uses: softprops/action-gh-release@v2
@@ -162,10 +172,10 @@ jobs:
             ## 元素周期表 Pro ${{ github.ref_name }}
 
             ### 下载
-            | 平台 | 文件 |
-            |------|------|
-            | Windows x64 | `PeriodicTable-${{ github.ref_name }}-win64.zip` |
-            | Linux x64 | `PeriodicTable-${{ github.ref_name }}-linux-x64.tar.gz` |
+            | 平台 | 文件 | 说明 |
+            |------|------|------|
+            | Windows x64 | `PeriodicTable-${{ github.ref_name }}-win64.zip` | 解压即用 |
+            | Linux (APT 推荐) | `periodictable-pro-${{ github.ref_name }}_amd64.deb` | `sudo apt install ./...deb` |
+            | Linux (免安装) | `PeriodicTable-${{ github.ref_name }}-linux-x64.tar.gz` | `tar -xzf` 后 `./run.sh` |
 
-            Windows：解压后双击 `PeriodicTable.exe`（已包含 Qt 运行库）。
-            Linux：`tar -xzf` 后执行 `./run.sh`，或 `sudo ./install.sh` 安装到系统。
+            校验值见 `SHA256SUMS.txt`。
