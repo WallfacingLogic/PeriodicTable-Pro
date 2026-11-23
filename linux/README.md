@@ -11,6 +11,18 @@
 - x86-64 架构的 Linux 发行版（统信 UOS、深度 Deepin、Ubuntu、麒麟、Debian 等）
 - 无需预装任何 Qt 运行库；二进制最高要求 GLIBC_2.34（Ubuntu 22.04+ / Debian 12+ 等均可运行）
 
+## APT 安装（推荐，统信 UOS / Deepin / Ubuntu / 麒麟）
+
+在 Release 页面下载 `periodictable-pro_1.0.0_amd64.deb`：
+
+```bash
+sudo apt install ./periodictable-pro_1.0.0_amd64.deb
+PeriodicTable              # 命令行启动，或开始菜单搜索"元素周期表"
+sudo apt remove --purge periodictable-pro   # 卸载
+```
+
+此为真正的系统包：安装后可在开始菜单出现、命令行直接运行，卸载干净无残留。已内含全部 Qt6 库与中文字体，仅依赖 glibc/libstdc++。
+
 ## 快速开始（免安装，推荐）
 
 ```bash
@@ -54,11 +66,12 @@ QT_QPA_PLATFORM=offscreen ./run.sh --size 1280x720 --screenshot test.png
 
 | 文件 | 用途 |
 |------|------|
-| `periodic-table-linux-selfcontained.tar.gz` | 完整自包含包（约 35 MB，含 Qt6 库/插件/中文字体），推荐分发该文件 |
+| `periodictable-pro_1.0.0_amd64.deb` | Debian/Ubuntu/统信/麒麟系统包，`apt install` 即用（推荐） |
+| `periodic-table-linux-selfcontained.tar.gz` | 完整自包含包（约 31 MB，含 Qt6 库/插件/中文字体），免安装 |
 | `periodic-table-linux-x64.tar.gz` | 仅主程序的小包（需目标系统自带 Qt6，不推荐单独分发） |
 | `PeriodicTable` | 主程序（ELF x86-64） |
 | `run-selfcontained.sh` | 本地源码目录直接运行用（设置自包含库路径/字体） |
-| `install.sh` / `uninstall.sh` | 系统安装 / 卸载 |
+| `install.sh` / `uninstall.sh` | 系统安装 / 卸载（免安装版用） |
 | `periodic-table.desktop` | 桌面入口 |
 
 ## 验证记录
@@ -71,3 +84,4 @@ QT_QPA_PLATFORM=offscreen ./run.sh --size 1280x720 --screenshot test.png
 ## 更新记录
 
 - 2026-11-23：修复详情卡片中英文名/中文名在窄面板被裁切的问题（改用 QFontMetrics::elidedText 并重新平衡布局）；Windows 与 Linux 两个自包含包均已用修复后的二进制重建。Linux 包 SHA256 已更新至 SHA256SUMS.txt。
+- 2026-11-23：新增 Debian/Ubuntu `.deb` 系统包（`periodictable-pro_1.0.0_amd64.deb`）。在纯净 Ubuntu 26.04 中用 `apt install ./periodictable-pro_1.0.0_amd64.deb` 实测：依赖解析通过、安装成功、开始菜单入口与图标就位、`PeriodicTable` 命令行可运行、中文与超重元素显示正常、连续 3 次运行输出一致、`apt remove --purge` 卸载无残留。构建脚本见 `scripts/build-deb.sh`。

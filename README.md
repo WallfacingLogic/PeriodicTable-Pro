@@ -35,6 +35,7 @@ C++17 · Qt 6 · 单文件零依赖 · Windows / Linux 双平台
 | 平台 | 文件 | 说明 |
 |------|------|------|
 | Windows x64 | `PeriodicTable-<ver>-win64.7z` | 自包含，解压即用，无需安装 Qt |
+| Linux x64 (APT) | `periodictable-pro_<ver>_amd64.deb` | **推荐**，Debian/Ubuntu/统信/麒麟可直接 apt 安装 |
 | Linux x64 | `PeriodicTable-<ver>-linux-x64.tar.gz` | 自包含，含 Qt6 库与中文字体，解压即用 |
 
 ### Windows
@@ -43,7 +44,20 @@ C++17 · Qt 6 · 单文件零依赖 · Windows / Linux 双平台
 # 解压后双击 PeriodicTable.exe
 ```
 
-### Linux（统信 UOS / Deepin / Ubuntu / 麒麟）
+### Linux — APT 安装（推荐，Debian / Ubuntu / 统信 UOS / 麒麟）
+
+```bash
+sudo apt install ./periodictable-pro_*-amd64.deb
+# 命令行运行：
+PeriodicTable
+# 或在开始菜单搜索“元素周期表”
+# 卸载：
+sudo apt remove --purge periodictable-pro
+```
+
+`.deb` 已内含全部 Qt6 库、插件与中文字体，无需额外安装依赖（仅依赖系统 glibc/libstdc++）。
+
+### Linux — 免安装解压版
 
 ```bash
 tar -xzf PeriodicTable-*-linux-x64.tar.gz
