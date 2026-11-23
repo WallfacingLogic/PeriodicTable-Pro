@@ -31,24 +31,34 @@ jobs:
           if (-not $qt) { throw "QT_ROOT_DIR is empty" }
           Write-Host "Qt root: $qt"
 
-          # Detect the installed Visual Studio generator (2022 or 2026)
+          # Detect installed Visual Studio generator (2022 or 2026)
           $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          if (-not (Test-Path $vswhere)) { throw "vswhere.exe not found" }
           $inst = & $vswhere -latest -products '*' -property installationVersion
-          $gen = if ($inst -like '18.*') { 'Visual Studio 18 2026' } else { 'Visual Studio 17 2022' }
+          if ($inst -like '18.*') { $gen = 'Visual Studio 18 2026' }
+          elseif ($inst -like '17.*') { $gen = 'Visual Studio 17 2022' }
+          else { throw "Unsupported Visual Studio version: $inst" }
           Write-Host "Using generator: $gen"
 
           cmake -S . -B build -G $gen -A x64 "-DCMAKE_PREFIX_PATH=$qt"
+          if ($LASTEXITCODE -ne 0) { throw "CMake configure failed" }
 
       - name: Build
-        run: cmake --build build --config Release
+        shell: pwsh
+        run: |
+          cmake --build build --config Release
+          if ($LASTEXITCODE -ne 0) { throw "Build failed" }
 
       - name: Deploy Qt runtime
         shell: pwsh
         run: |
           $exe = "build\Release\PeriodicTable.exe"
+          if (-not (Test-Path $exe)) { throw "Executable not found" }
           $wq = Join-Path $env:QT_ROOT_DIR "bin\windeployqt.exe"
+          if (-not (Test-Path $wq)) { throw "windeployqt not found at $wq" }
           & $wq --release --no-translations --no-system-d3d-compiler `
-              --no-opengl-sw --no-quick-import $exe
+              --no-opengl-sw $exe
+          if ($LASTEXITCODE -ne 0) { throw "windeployqt failed" }
 
       - name: Package
         shell: pwsh
@@ -56,13 +66,14 @@ jobs:
           $name = "PeriodicTable-${{ github.ref_name }}-win64"
           New-Item -ItemType Directory -Force -Path "dist\$name" | Out-Null
           Copy-Item "build\Release\*" "dist\$name\" -Recurse -Force
-          Compress-Archive -Path "dist\$name\*" -DestinationPath "dist\$name.zip"
-          echo "ARTIFACT=dist\$name.zip" >> $env:GITHUB_ENV
+          Compress-Archive -Path "dist\$name\*" -DestinationPath "dist\$name.zip" -Force
+          Write-Host "Packaged: dist\$name.zip"
 
       - uses: actions/upload-artifact@v4
         with:
           name: windows-x64
           path: dist/*.zip
+          if-no-files-found: error
 
   build-linux:
     name: Linux x64
@@ -74,7 +85,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y cmake g++ qt6-base-dev libgl1-mesa-dev \
-              fonts-noto-cjk python3-fonttools zlib1g-dev
+              fonts-noto-cjk python3-fonttools zlib1g-dev fakeroot
 
       - name: Build
         run: |
@@ -91,7 +102,7 @@ jobs:
           cp build/PeriodicTable "$PKG/"
           cp resources/PeriodicTable.png "$PKG/periodic-table.png"
 
-          # 递归收集运行依赖（排除 glibc/gcc 核心）
+          # Recursively collect runtime dependencies (excluding glibc/gcc core)
           collect() {
             local target="$1"
             ldd "$target" 2>/dev/null | awk '/=> \// {print $3}' | while read -r lib; do
@@ -108,7 +119,6 @@ jobs:
           }
           collect build/PeriodicTable
 
-          # 平台插件
           PLUGDIR=$(find /usr/lib -type d -path '*qt6/plugins/platforms' | head -1)
           for plug in libqxcb.so libqoffscreen.so libqminimal.so; do
             [ -f "$PLUGDIR/$plug" ] && cp "$PLUGDIR/$plug" "$PKG/lib/plugins/platforms/"
@@ -117,7 +127,7 @@ jobs:
             [ -f "$plug" ] && collect "$plug"
           done
 
-          # 中文字体子集（覆盖全部 118 元素中文名，含扩展区生僻字）
+          # CJK font subset (all 118 element names incl. extension chars)
           python3 - <<'PY'
           import glob
           chars=set(chr(i) for i in range(0x20,0x7f))
@@ -134,7 +144,6 @@ jobs:
               --layout-features='*' --no-hinting --desubroutinize --name-IDs='*'
           done
 
-          # 运行脚本
           cp linux/run-selfcontained.sh "$PKG/run.sh"
           cp linux/run.sh "$PKG/run-local.sh"
           cp linux/install.sh linux/uninstall.sh "$PKG/"
@@ -143,16 +152,14 @@ jobs:
           chmod +x "$PKG/PeriodicTable" "$PKG"/*.sh
 
           tar -czf "dist/$NAME.tar.gz" -C dist "$NAME"
-          cd dist && sha256sum *.tar.gz > SHA256SUMS.txt
+          echo "Packaged: dist/$NAME.tar.gz"
 
       - name: Build .deb package
         shell: bash
         run: |
-          # 依赖 install + fakeroot + 图标工具（Ubuntu runner 自带大部分）
-          sudo apt-get install -y fakeroot > /dev/null
-          # 复制构建脚本到 runner 并构建（脚本读取 dist/ 下的 tarball）
-          mkdir -p dist
+          set -e
           bash scripts/build-deb.sh "${GITHUB_REF_NAME#v}" "$PWD"
+          ls -lh dist/*.deb
 
       - uses: actions/upload-artifact@v4
         with:
@@ -160,7 +167,7 @@ jobs:
           path: |
             dist/*.tar.gz
             dist/*.deb
-            dist/SHA256SUMS.txt
+          if-no-files-found: error
 
   release:
     name: Publish Release
@@ -172,11 +179,17 @@ jobs:
         with:
           path: artifacts
 
-      - name: Collect
+      - name: Collect and checksum
         run: |
+          set -e
           mkdir -p out
-          find artifacts -type f \( -name '*.zip' -o -name '*.7z' -o -name '*.tar.gz' -o -name '*.deb' -o -name 'SHA256SUMS.txt' \) -exec cp {} out/ \;
-          ls -lh out/
+          find artifacts -type f \( -name '*.zip' -o -name '*.7z' -o -name '*.tar.gz' -o -name '*.deb' \) -exec cp {} out/ \;
+          cd out
+          sha256sum * > SHA256SUMS.txt
+          echo "=== Release artifacts ==="
+          ls -lh
+          echo "=== SHA256SUMS ==="
+          cat SHA256SUMS.txt
 
       - uses: softprops/action-gh-release@v2
         with:
@@ -185,11 +198,13 @@ jobs:
           body: |
             ## 元素周期表 Pro ${{ github.ref_name }}
 
+            专业完整的交互式元素周期表，C++17 + Qt6，Windows / Linux 双平台。
+
             ### 下载
             | 平台 | 文件 | 说明 |
             |------|------|------|
-            | Windows x64 | `PeriodicTable-${{ github.ref_name }}-win64.zip` | 解压即用 |
-            | Linux (APT 推荐) | `periodictable-pro-${{ github.ref_name }}_amd64.deb` | `sudo apt install ./...deb` |
+            | Windows x64 | `PeriodicTable-${{ github.ref_name }}-win64.zip` | 解压即用，含 Qt 运行库 |
+            | Linux (APT 推荐) | `periodictable-pro_<版本>_amd64.deb` | `sudo apt install ./periodictable-pro_*_amd64.deb` |
             | Linux (免安装) | `PeriodicTable-${{ github.ref_name }}-linux-x64.tar.gz` | `tar -xzf` 后 `./run.sh` |
 
-            校验值见 `SHA256SUMS.txt`。
+            校验值见 `SHA256SUMS.txt`（包含全部文件的 SHA256）。
