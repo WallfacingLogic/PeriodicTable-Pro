@@ -3,10 +3,15 @@
 # 用法: ./run.sh  或  ./run.sh --screenshot out.png
 DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# Qt6 库与插件
+# Qt6 库与插件（新包布局：库在 lib/，插件在 plugins/；兼容旧的 lib/plugins/）
 export LD_LIBRARY_PATH="$DIR/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-export QT_PLUGIN_PATH="$DIR/lib/plugins${QT_PLUGIN_PATH:+:$QT_PLUGIN_PATH}"
-export QT_QPA_PLATFORM_PLUGIN_PATH="$DIR/lib/plugins/platforms"
+if [ -d "$DIR/plugins" ]; then
+  export QT_PLUGIN_PATH="$DIR/plugins${QT_PLUGIN_PATH:+:$QT_PLUGIN_PATH}"
+  export QT_QPA_PLATFORM_PLUGIN_PATH="$DIR/plugins/platforms"
+else
+  export QT_PLUGIN_PATH="$DIR/lib/plugins${QT_PLUGIN_PATH:+:$QT_PLUGIN_PATH}"
+  export QT_QPA_PLATFORM_PLUGIN_PATH="$DIR/lib/plugins/platforms"
+fi
 
 # 私有 fontconfig：内置 Noto Sans CJK SC 覆盖全部 118 元素中文名
 # 配置与缓存写入用户私有目录，避免系统安装后普通用户无写权限

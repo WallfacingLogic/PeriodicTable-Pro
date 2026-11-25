@@ -76,66 +76,90 @@ jobs:
           if-no-files-found: error
 
   build-linux:
-    name: Linux x64
+    name: Linux x64 (glibc 2.28 compatible)
     runs-on: ubuntu-22.04
+    # 必须在旧 glibc 环境构建：ubuntu-22.04 的 glibc 2.35 会引入 GLIBC_2.34 符号
+    # 导致统信 UOS (glibc 2.28) 无法运行。ubuntu:20.04 容器 glibc 2.31，
+    # 配合 aqt 安装的 Qt 6.2.4（要求 GLIBC_2.28）产出兼容包。
+    container:
+      image: ubuntu:20.04
     steps:
       - uses: actions/checkout@v4
 
       - name: Install dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
         run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake g++ qt6-base-dev libgl1-mesa-dev \
-              fonts-noto-cjk python3-fonttools zlib1g-dev fakeroot
+          apt-get update -qq
+          apt-get install -y -qq build-essential cmake git curl ca-certificates \
+            pkg-config python3 python3-pip fakeroot \
+            libgl1-mesa-dev libegl1-mesa-dev \
+            libx11-dev libxcb1-dev libxkbcommon-x11-dev libxcb-xinerama0-dev \
+            libxcb-image0-dev libxcb-icccm4-dev libxcb-keysyms1-dev libxcb-randr0-dev \
+            libxcb-render-util0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+            libxcb-cursor-dev libxcb-xkb-dev libfontconfig1-dev libfreetype6-dev \
+            libdbus-1-dev libglib2.0-dev libpng-dev zlib1g-dev fonts-noto-cjk
+          pip3 install -q aqtinstall fonttools
+
+      - name: Install Qt 6.2.4 (glibc 2.28 compatible)
+        run: |
+          aqt install-qt linux desktop 6.2.4 gcc_64 -O /opt/Qt
+          echo "QT_ROOT=/opt/Qt/6.2.4/gcc_64" >> "$GITHUB_ENV"
 
       - name: Build
         run: |
-          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          set -e
+          export PATH="$QT_ROOT/bin:$PATH"
+          export LD_LIBRARY_PATH="$QT_ROOT/lib:${LD_LIBRARY_PATH:-}"
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$QT_ROOT"
           cmake --build build -j$(nproc)
 
       - name: Assemble self-contained package
+        shell: bash
         run: |
           set -e
           NAME="PeriodicTable-${{ github.ref_name }}-linux-x64"
           PKG="dist/$NAME"
-          mkdir -p "$PKG/lib/plugins/platforms" "$PKG/fonts"
+          mkdir -p "$PKG/lib" "$PKG/plugins" "$PKG/fonts"
 
           cp build/PeriodicTable "$PKG/"
-          cp resources/PeriodicTable.png "$PKG/periodic-table.png"
+          cp -a "$QT_ROOT"/lib/libQt6*.so* "$PKG/lib/"
+          cp -a "$QT_ROOT"/lib/libicu*.so* "$PKG/lib/"
+          cp -a "$QT_ROOT"/plugins/platforms "$PKG/plugins/"
+          cp -a "$QT_ROOT"/plugins/imageformats "$PKG/plugins/"
+          [ -d "$QT_ROOT/plugins/xcbglintegrations" ] && cp -a "$QT_ROOT"/plugins/xcbglintegrations "$PKG/plugins/" || true
 
-          # Recursively collect runtime dependencies (excluding glibc/gcc core)
+          # Recursively collect non-system deps. System libs (X11/glib/png/systemd...)
+          # are provided by the target OS and must NOT be bundled: their focal builds
+          # require higher glibc than UOS 2.28.
           collect() {
-            local target="$1"
-            ldd "$target" 2>/dev/null | awk '/=> \// {print $3}' | while read -r lib; do
+            target="$1"
+            ldd "$target" 2>/dev/null | awk '/=> \// {print $3}' > /tmp/pt-deplist
+            while read -r lib; do
               [ -f "$lib" ] || continue
               b=$(basename "$lib")
               case "$b" in
-                libc.so.6|libm.so.6|libpthread.so.0|libdl.so.2|librt.so.1|libstdc++.so.6|libgcc_s.so.1|ld-linux*) continue ;;
+                libc.so.6|libm.so.6|libpthread.so.0|libdl.so.2|librt.so.1|libstdc++.so.6|libgcc_s.so.1|ld-linux*|libresolv.so.2) continue ;;
+                libpng*|libsystemd*|libglib*|libgobject*|libgthread*|libgmodule*|libz.so*|libexpat*|libfreetype*|libfontconfig*|libX11*|libxcb*|libXau*|libXdmcp*|libICE*|libSM*|libuuid*|libdbus*|libGL*|libEGL*|libxkbcommon*|libicu*|libbrotli*|libzstd*|liblzma*|libgssapi*|libkrb5*|libk5crypto*|libcom_err*|libgcrypt*|libgpg-error*|libpcre*) continue ;;
               esac
               if [ ! -e "$PKG/lib/$b" ]; then
                 cp -L "$lib" "$PKG/lib/$b"
                 collect "$PKG/lib/$b"
               fi
-            done
+            done < /tmp/pt-deplist
           }
-          collect build/PeriodicTable
+          collect "$PKG/PeriodicTable"
+          for plug in "$PKG"/plugins/*/*.so; do [ -f "$plug" ] && collect "$plug"; done
 
-          PLUGDIR=$(find /usr/lib -type d -path '*qt6/plugins/platforms' | head -1)
-          for plug in libqxcb.so libqoffscreen.so libqminimal.so; do
-            [ -f "$PLUGDIR/$plug" ] && cp "$PLUGDIR/$plug" "$PKG/lib/plugins/platforms/"
-          done
-          for plug in "$PKG"/lib/plugins/platforms/*.so; do
-            [ -f "$plug" ] && collect "$plug"
-          done
-
-          # CJK font subset (all 118 element names incl. extension chars)
+          # CJK font subset covering all 118 element names (incl. extension chars)
           python3 - <<'PY'
           import glob
-          chars=set(chr(i) for i in range(0x20,0x7f))
+          chars = set(chr(i) for i in range(0x20, 0x7f))
           for c in "，。、；：？！“”‘’（）《》〈〉【】·—…￥％＃＆＠～²³¹⁰⁻×℃":
               chars.add(c)
-          for p in glob.glob('*.cpp')+glob.glob('*.h'):
-              chars.update(ch for ch in open(p,encoding='utf-8').read() if ord(ch)>127)
-          open('/tmp/charset.txt','w',encoding='utf-8').write(''.join(sorted(chars)))
+          for p in glob.glob('*.cpp') + glob.glob('*.h'):
+              chars.update(ch for ch in open(p, encoding='utf-8').read() if ord(ch) > 127)
+          open('/tmp/charset.txt', 'w', encoding='utf-8').write(''.join(sorted(chars)))
           PY
           for w in Regular Bold; do
             python3 -m fontTools.subset "/usr/share/fonts/opentype/noto/NotoSansCJK-${w}.ttc" \
@@ -144,11 +168,11 @@ jobs:
               --layout-features='*' --no-hinting --desubroutinize --name-IDs='*'
           done
 
+          cp resources/PeriodicTable.png "$PKG/periodic-table.png"
           cp linux/run-selfcontained.sh "$PKG/run.sh"
-          cp linux/run.sh "$PKG/run-local.sh"
-          cp linux/install.sh linux/uninstall.sh "$PKG/"
+          cp linux/install-user.sh linux/uninstall-user.sh "$PKG/"
+          cp linux/PORTABLE-README.md "$PKG/README.md"
           cp linux/periodic-table.desktop "$PKG/"
-          cp linux/README.md "$PKG/README.md"
           chmod +x "$PKG/PeriodicTable" "$PKG"/*.sh
 
           tar -czf "dist/$NAME.tar.gz" -C dist "$NAME"
@@ -159,6 +183,7 @@ jobs:
         run: |
           set -e
           bash scripts/build-deb.sh "${GITHUB_REF_NAME#v}" "$PWD"
+          dpkg-deb -f dist/*.deb Depends
           ls -lh dist/*.deb
 
       - uses: actions/upload-artifact@v4
@@ -200,11 +225,15 @@ jobs:
 
             专业完整的交互式元素周期表，C++17 + Qt6，Windows / Linux 双平台。
 
+            ### Linux 无需 root 权限（v1.0.2 起）
+            基于 Qt 6.2.4 + glibc 2.28 构建，兼容统信 UOS / Deepin / 麒麟。
+            便携包解压后用 `./install-user.sh` 装到 `~/.local`，全程无需 sudo。
+
             ### 下载
             | 平台 | 文件 | 说明 |
             |------|------|------|
             | Windows x64 | `PeriodicTable-${{ github.ref_name }}-win64.zip` | 解压即用，含 Qt 运行库 |
-            | Linux (APT 推荐) | `periodictable-pro_<版本>_amd64.deb` | `sudo apt install ./periodictable-pro_*_amd64.deb` |
-            | Linux (免安装) | `PeriodicTable-${{ github.ref_name }}-linux-x64.tar.gz` | `tar -xzf` 后 `./run.sh` |
+            | Linux (免安装/用户级) | `PeriodicTable-${{ github.ref_name }}-linux-x64.tar.gz` | `tar -xzf` 后 `./run.sh` 或 `./install-user.sh`（无需 root） |
+            | Linux (APT) | `periodictable-pro_<版本>_amd64.deb` | `sudo apt install ./periodictable-pro_*_amd64.deb` |
 
             校验值见 `SHA256SUMS.txt`（包含全部文件的 SHA256）。

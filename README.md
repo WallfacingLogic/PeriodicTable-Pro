@@ -44,26 +44,37 @@ C++17 · Qt 6 · 单文件零依赖 · Windows / Linux 双平台
 # 解压后双击 PeriodicTable.exe
 ```
 
-### Linux — APT 安装（推荐，Debian / Ubuntu / 统信 UOS / 麒麟）
+### Linux — 无需 root 权限（统信 UOS 等无 root 场景）
+
+**所有安装方式都不需要 root 权限。** 新版本基于 Qt 6.2.4 + glibc 2.28 构建，兼容统信 UOS（glibc 2.28）、Deepin、麒麟及 Ubuntu 20.04+。
+
+解压后用用户级安装脚本，程序装到 `~/.local`，开始菜单可见，**全程无需 sudo**：
+
+```bash
+tar -xzf PeriodicTable-*-linux-x64.tar.gz
+cd PeriodicTable-*-linux-x64
+./install-user.sh     # 无需 root，装到当前用户目录
+# 卸载：./uninstall-user.sh
+```
+
+若图形包管理器安装 `.deb` 时提示"库中没有依赖项"，改用上面的用户级安装即可；`.deb` 的 `Depends` 现已修正为 `libc6 (>= 2.28)`。
+
+### Linux — APT 安装（有 root 权限时）
 
 ```bash
 sudo apt install ./periodictable-pro_*-amd64.deb
-# 命令行运行：
-PeriodicTable
-# 或在开始菜单搜索“元素周期表”
-# 卸载：
-sudo apt remove --purge periodictable-pro
+PeriodicTable         # 命令行运行，或开始菜单搜索“元素周期表”
+sudo apt remove --purge periodictable-pro   # 卸载
 ```
 
-`.deb` 已内含全部 Qt6 库、插件与中文字体，无需额外安装依赖（仅依赖系统 glibc/libstdc++）。
+`.deb` 已内含全部 Qt6 库、插件与中文字体，无需额外安装依赖（仅依赖系统 glibc ≥ 2.28 / libstdc++）。
 
 ### Linux — 免安装解压版
 
 ```bash
 tar -xzf PeriodicTable-*-linux-x64.tar.gz
 cd PeriodicTable-*-linux-x64
-./run.sh              # 免安装运行
-sudo ./install.sh     # 或安装到系统（开始菜单可见）
+./run.sh              # 免安装直接运行，含全部依赖
 ```
 
 ## 从源码构建

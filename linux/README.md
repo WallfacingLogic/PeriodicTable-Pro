@@ -9,19 +9,33 @@
 ## 系统要求
 
 - x86-64 架构的 Linux 发行版（统信 UOS、深度 Deepin、Ubuntu、麒麟、Debian 等）
-- 无需预装任何 Qt 运行库；二进制最高要求 GLIBC_2.34（Ubuntu 22.04+ / Debian 12+ 等均可运行）
+- 无需预装任何 Qt 运行库；基于 Qt 6.2.4 + glibc 2.28 构建，**兼容统信 UOS（glibc 2.28）、Debian 10+、Ubuntu 20.04+**
+- **所有安装方式都不需要 root 权限**
 
-## APT 安装（推荐，统信 UOS / Deepin / Ubuntu / 麒麟）
+## 用户级安装（无 root 权限，推荐）
 
-在 Release 页面下载 `periodictable-pro_1.0.0_amd64.deb`：
+没有 root 权限、或图形包管理器提示"库中没有依赖项"时，用用户级安装：
 
 ```bash
-sudo apt install ./periodictable-pro_1.0.0_amd64.deb
+tar -xzf PeriodicTable-*-linux-x64.tar.gz
+cd PeriodicTable-*-linux-x64
+./install-user.sh     # 装到 ~/.local，无需 sudo
+# ./uninstall-user.sh # 卸载
+```
+
+程序装到 `~/.local/periodic-table`，启动器 `~/.local/bin/PeriodicTable`，桌面入口 `~/.local/share/applications`（开始菜单可见）。命令行找不到时把 `~/.local/bin` 加入 PATH。
+
+## APT 安装（有 root 权限时，统信 UOS / Deepin / Ubuntu / 麒麟）
+
+在 Release 页面下载 `periodictable-pro_<ver>_amd64.deb`（需 root）：
+
+```bash
+sudo apt install ./periodictable-pro_*-amd64.deb
 PeriodicTable              # 命令行启动，或开始菜单搜索"元素周期表"
 sudo apt remove --purge periodictable-pro   # 卸载
 ```
 
-此为真正的系统包：安装后可在开始菜单出现、命令行直接运行，卸载干净无残留。已内含全部 Qt6 库与中文字体，仅依赖 glibc/libstdc++。
+`Depends` 已修正为 `libc6 (>= 2.28)`，统信 UOS 的图形包管理器不会再报"库中没有依赖项"。已内含全部 Qt6 库与中文字体。无 root 权限时用上面的"用户级安装"。
 
 ## 快速开始（免安装，推荐）
 
@@ -66,13 +80,12 @@ QT_QPA_PLATFORM=offscreen ./run.sh --size 1280x720 --screenshot test.png
 
 | 文件 | 用途 |
 |------|------|
-| `periodictable-pro_1.0.0_amd64.deb` | Debian/Ubuntu/统信/麒麟系统包，`apt install` 即用（推荐） |
-| `periodic-table-linux-selfcontained.tar.gz` | 完整自包含包（约 31 MB，含 Qt6 库/插件/中文字体），免安装 |
-| `periodic-table-linux-x64.tar.gz` | 仅主程序的小包（需目标系统自带 Qt6，不推荐单独分发） |
-| `PeriodicTable` | 主程序（ELF x86-64） |
-| `run-selfcontained.sh` | 本地源码目录直接运行用（设置自包含库路径/字体） |
-| `install.sh` / `uninstall.sh` | 系统安装 / 卸载（免安装版用） |
-| `periodic-table.desktop` | 桌面入口 |
+| `periodictable-pro_<ver>_amd64.deb` | Debian/Ubuntu/统信/麒麟系统包，`apt install` 即用（需 root） |
+| `PeriodicTable-<ver>-linux-x64.tar.gz` | **完整自包含便携包（约 30 MB）**，含 Qt6 库/插件/中文字体，解压即用 |
+| `install-user.sh` / `uninstall-user.sh` | **用户级安装 / 卸载（无需 root）** |
+| `run.sh` | 自包含运行脚本（设置库路径/插件路径/私有字体） |
+| `PeriodicTable` | 主程序（ELF x86-64，仅要求 GLIBC_2.14） |
+| `periodic-table.desktop` / `periodic-table.png` | 桌面入口 / 图标 |
 
 ## 验证记录
 

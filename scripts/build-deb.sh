@@ -24,7 +24,14 @@ mkdir -p "$ROOT/DEBIAN" \
          "$ROOT/usr/share/doc/periodictable-pro"
 
 # ---- 从自包含 tarball 取内容（保证与 Release 二进制一致）----
-TARBALL="$SRC/dist/PeriodicTable-v${VERSION}-linux-x64.tar.gz"
+# 优先使用兼容老系统(glibc>=2.28)的新便携包；没有则回退旧包
+NEWTAR="$SRC/dist/PeriodicTable-${VERSION}-linux-x64.tar.gz"
+OLDTAR="$SRC/dist/PeriodicTable-v${VERSION}-linux-x64.tar.gz"
+if [ -f "$NEWTAR" ]; then
+  TARBALL="$NEWTAR"
+else
+  TARBALL="$OLDTAR"
+fi
 if [ ! -f "$TARBALL" ]; then
   echo "找不到 $TARBALL" >&2
   exit 1
@@ -37,6 +44,8 @@ PAYLOAD=$(find "$UNPACK" -maxdepth 1 -type d -name 'PeriodicTable-*-linux-x64' |
 cp "$PAYLOAD/PeriodicTable"   "$ROOT/usr/lib/periodic-table/"
 cp -a "$PAYLOAD/lib"          "$ROOT/usr/lib/periodic-table/"
 cp -a "$PAYLOAD/fonts"        "$ROOT/usr/lib/periodic-table/"
+# 新布局：顶层 plugins/；旧布局：lib/plugins/。两者都兼容复制
+[ -d "$PAYLOAD/plugins" ] && cp -a "$PAYLOAD/plugins" "$ROOT/usr/lib/periodic-table/"
 cp "$PAYLOAD/run.sh"          "$ROOT/usr/lib/periodic-table/"
 chmod +x "$ROOT/usr/lib/periodic-table/run.sh"
 cp "$PAYLOAD/README.md"       "$ROOT/usr/share/doc/periodictable-pro/README.md"
@@ -61,7 +70,7 @@ Version: $PKGVER
 Section: science
 Priority: optional
 Architecture: $ARCH
-Depends: libc6 (>= 2.34), libstdc++6, libgcc-s1
+Depends: libc6 (>= 2.28), libstdc++6, libgcc-s1
 Installed-Size: $INSTALLED_KB
 Maintainer: Logic <3846190707@qq.com>
 Homepage: https://github.com/WallfacingLogic/PeriodicTable-Pro
